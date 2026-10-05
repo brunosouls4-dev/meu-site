@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Principais Notícias de Hoje</title>
+  <style>
+    body {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 24px 16px;
+      color: #202124;
+      background: #f5f6f8;
+      font: 16px system-ui, sans-serif;
+    }
+    h1 { margin-bottom: 8px; }
+    #status { color: #5f6368; }
+    
+    .categorias {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 16px 0;
+    }
+    .btn-categoria {
+      padding: 8px 14px;
+      border: 1px solid #dadce0;
+      border-radius: 20px;
+      background: white;
+      color: #3c4043;
+      font: inherit;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-categoria:hover {
+      background: #f1f3f4;
+    }
+    .btn-categoria.ativo {
+      background: #1967d2;
+      color: white;
+      border-color: #1967d2;
+    }
+    
+    article {
+      margin: 12px 0;
+      padding: 16px;
+      border-radius: 10px;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    article a {
+      color: #174ea6;
+      font-weight: 600;
+      text-decoration: none;
+      font-size: 17px;
+      line-height: 1.4;
+      display: block;
+    }
+    article a:hover {
+      text-decoration: underline;
+    }
+    small {
+      display: block;
+      margin-top: 8px;
+      color: #5f6368;
+    }
+  </style>
+</head>
+<body>
+  <h1>Principais Notícias de Hoje</h1>
+  <p id="status">Carregando notícias em tempo real…</p>
+  
+  <nav class="categorias">
+    <button class="btn-categoria ativo" data-url="https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419">Principais</button>
+    <button class="btn-categoria" data-url="https://news.google.com/rss/headlines/section/topic/NATION?hl=pt-BR&gl=BR&ceid=BR:pt-419">Brasil</button>
+    <button class="btn-categoria" data-url="https://news.google.com/rss/headlines/section/topic/WORLD?hl=pt-BR&gl=BR&ceid=BR:pt-419">Mundo</button>
+    <button class="btn-categoria" data-url="https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=pt-BR&gl=BR&ceid=BR:pt-419">Economia</button>
+    <button class="btn-categoria" data-url="https://news.google.com/rss/headlines/section/topic/SCITECH?hl=pt-BR&gl=BR&ceid=BR:pt-419">Tecnologia</button>
+    <button class="btn-categoria" data-url="https://www.vaticannews.va/pt.rss.xml">Igreja & Vaticano</button>
+  </nav>
+
+  <main id="noticias"></main>
+
+<script>
+  const statusEl = document.querySelector("#status");
+  const noticiasEl = document.querySelector("#noticias");
+  const botoesCategoria = document.querySelectorAll(".btn-categoria");
+
+  // Callback chamada assim que o proxy retorna o RSS convertido do Google / Vaticano
+  window.carregarFeed = function(dados) {
+    noticiasEl.replaceChildren();
+
+    if (!dados || !dados.items || dados.items.length === 0) {
+      statusEl.textContent = "Nenhuma notícia recente encontrada para esta categoria.";
+      return;
+    }
+
+    for (const item of dados.items.slice(0, 20)) {
+      const artigo = document.createElement("article");
+      const ancora = document.createElement("a");
+      
+      ancora.textContent = item.title || "Sem título";
+      ancora.href = item.url || "#";
+      ancora.target = "_blank";
+      ancora.rel = "noopener noreferrer";
+
+      const detalhe = document.createElement("small");
+      let dataFormatada = "";
+      if (item.date_published) {
+        try {
+          dataFormatada = new Date(item.date_published).toLocaleString("pt-BR", {
+            dateStyle: "short",
+            timeStyle: "short"
+          });
+        } catch (e) {}
+      }
+
+      detalhe.textContent = dataFormatada ? "Publicado em: " + dataFormatada : "";
+
+      artigo.append(ancora);
+      if (dataFormatada) artigo.append(detalhe);
+
+      noticiasEl.append(artigo);
+    }
+
+    statusEl.textContent = "Notícias atualizadas em tempo real.";
+  };
+
+  function buscar(rssUrl) {
+    statusEl.textContent = "Buscando notícias no Google e veículos oficiais…";
+
+    // Remove scripts de requisições anteriores
+    const scriptAntigo = document.querySelector("#script-feed");
+    if (scriptAntigo) scriptAntigo.remove();
+
+    // Injeta tag <script> com a API pública do Feed2Json usando a função callback global (JSONP)
+    const script = document.createElement("script");
+    script.id = "script-feed";
+    script.src = "https://feed2json.org/convert?url=" + encodeURIComponent(rssUrl) + "&callback=carregarFeed";
+
+    script.onerror = function() {
+      statusEl.textContent = "Erro de conexão ao carregar as notícias. Verifique sua internet.";
+    };
+
+    document.body.appendChild(script);
+  }
+
+  botoesCategoria.forEach(botao => {
+    botao.addEventListener("click", (e) => {
+      botoesCategoria.forEach(b => b.classList.remove("ativo"));
+      e.target.classList.add("ativo");
+      const url = e.target.getAttribute("data-url");
+      buscar(url);
+    });
+  });
+
+  // Carrega as manchetes do Google Notícias ao abrir
+  buscar("https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419");
+</script>
+</body>
+</html>
