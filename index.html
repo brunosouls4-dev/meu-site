@@ -4,8 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Principais Notícias de Hoje</title>
-  <!-- Leitor de RSS de alta precisão via CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/rss-parser/3.13.0/rss-parser.min.js"></script>
   <style>
     body {
       max-width: 720px;
@@ -74,86 +72,80 @@
   <p id="status">Carregando notícias…</p>
   
   <nav class="categorias">
-    <button class="btn-categoria ativo" data-url="https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419">Principais</button>
-    <button class="btn-categoria" data-url="https://news.google.com/rss/headlines/section/topic/NATION?hl=pt-BR&gl=BR&ceid=BR:pt-419">Brasil</button>
-    <button class="btn-categoria" data-url="https://news.google.com/rss/headlines/section/topic/WORLD?hl=pt-BR&gl=BR&ceid=BR:pt-419">Mundo</button>
-    <button class="btn-categoria" data-url="https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=pt-BR&gl=BR&ceid=BR:pt-419">Economia</button>
-    <button class="btn-categoria" data-url="https://news.google.com/rss/headlines/section/topic/SCITECH?hl=pt-BR&gl=BR&ceid=BR:pt-419">Tecnologia</button>
-    <button class="btn-categoria" data-url="https://www.vaticannews.va/pt.rss.xml">Igreja & Vaticano</button>
+    <button class="btn-categoria ativo" data-category="general">Principais</button>
+    <button class="btn-categoria" data-category="regional" data-country="BR">Brasil</button>
+    <button class="btn-categoria" data-category="world">Mundo</button>
+    <button class="btn-categoria" data-category="business">Economia</button>
+    <button class="btn-categoria" data-category="technology">Tecnologia</button>
+    <button class="btn-categoria" data-keywords="vaticano OR igreja">Igreja & Vaticano</button>
   </nav>
 
   <main id="noticias"></main>
 
 <script>
+  // Chave da Currents API inserida
+  const API_KEY = "fbqnFFZW7IBBxV-Ir-PLY_a-Y_xw6c7HTBLJj1h4kSEUPkaG"; 
+
   const statusEl = document.querySelector("#status");
   const noticiasEl = document.querySelector("#noticias");
   const botoesCategoria = document.querySelectorAll(".btn-categoria");
-  
-  const parser = new RSSParser();
 
-  // Lista de proxies de contingência (se um falhar, o código tenta o próximo)
-  const PROXIES = [
-    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-    url => `https://thingproxy.freeboard.io/fetch/${url}`
-  ];
-
-  async function buscarFeedComContingencia(targetUrl) {
-    for (let i = 0; i < PROXIES.length; i++) {
-      try {
-        const proxyUrl = PROXIES[i](targetUrl);
-        const feed = await parser.parseURL(proxyUrl);
-        if (feed && feed.items && feed.items.length > 0) {
-          return feed;
-        }
-      } catch (err) {
-        console.warn(`Proxy ${i + 1} falhou, tentando o próximo…`, err);
-      }
-    }
-    throw new Error("Todos os proxies falharam ao tentar buscar o feed.");
-  }
-
-  async function buscar(rssUrl) {
+  async function carregarNoticias(params) {
     statusEl.textContent = "Buscando notícias em tempo real…";
     noticiasEl.replaceChildren();
 
-    try {
-      const feed = await buscarFeedComContingencia(rssUrl);
-      const itens = feed.items || [];
+    const url = new URL("https://api.currentsapi.services/v1/search");
+    url.searchParams.append("apiKey", API_KEY);
+    url.searchParams.append("language", "pt");
 
-      itens.slice(0, 20).forEach(item => {
+    Object.keys(params).forEach(key => {
+      if (params[key]) url.searchParams.append(key, params[key]);
+    });
+
+    try {
+      const resposta = await fetch(url);
+      if (!resposta.ok) throw new Error("Erro na comunicação com a API");
+
+      const dados = await resposta.json();
+      const artigos = dados.news || [];
+
+      if (!artigos.length) {
+        statusEl.textContent = "Nenhuma notícia encontrada para esta categoria.";
+        return;
+      }
+
+      artigos.forEach(item => {
         const artigo = document.createElement("article");
         const ancora = document.createElement("a");
         
-        ancora.textContent = item.title || "Sem título";
-        ancora.href = item.link || "#";
+        ancora.textContent = item.title;
+        ancora.href = item.url;
         ancora.target = "_blank";
         ancora.rel = "noopener noreferrer";
 
         const detalhe = document.createElement("small");
         let dataFormatada = "";
         
-        if (item.pubDate) {
+        if (item.published) {
           try {
-            dataFormatada = new Date(item.pubDate).toLocaleString("pt-BR", {
+            dataFormatada = new Date(item.published).toLocaleString("pt-BR", {
               dateStyle: "short",
               timeStyle: "short"
             });
           } catch (e) {}
         }
 
-        detalhe.textContent = dataFormatada ? "Publicado em: " + dataFormatada : "";
+        const fonte = item.author || "Notícias";
+        detalhe.textContent = fonte + (dataFormatada ? " · " + dataFormatada : "");
 
-        artigo.append(ancora);
-        if (dataFormatada) artigo.append(detalhe);
-
+        artigo.append(ancora, detalhe);
         noticiasEl.append(artigo);
       });
 
       statusEl.textContent = "Notícias atualizadas com sucesso.";
     } catch (erro) {
       console.error(erro);
-      statusEl.textContent = "Erro ao carregar as notícias no momento. Tente trocar de categoria.";
+      statusEl.textContent = "Não foi possível carregar as notícias. Tente novamente em alguns instantes.";
     }
   }
 
@@ -161,13 +153,17 @@
     botao.addEventListener("click", (e) => {
       botoesCategoria.forEach(b => b.classList.remove("ativo"));
       e.target.classList.add("ativo");
-      const url = e.target.getAttribute("data-url");
-      buscar(url);
+      
+      const category = e.target.getAttribute("data-category");
+      const country = e.target.getAttribute("data-country");
+      const keywords = e.target.getAttribute("data-keywords");
+
+      carregarNoticias({ category, country, keywords });
     });
   });
 
-  // Carrega as manchetes ao abrir
-  buscar("https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419");
+  // Carrega as notícias principais ao abrir
+  carregarNoticias({ category: "general" });
 </script>
 </body>
 </html>
