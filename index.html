@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Principais Notícias de Hoje</title>
+  <!-- Leitor de RSS de alta precisão via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/rss-parser/3.13.0/rss-parser.min.js"></script>
   <style>
     body {
       max-width: 720px;
@@ -86,50 +88,54 @@
   const statusEl = document.querySelector("#status");
   const noticiasEl = document.querySelector("#noticias");
   const botoesCategoria = document.querySelectorAll(".btn-categoria");
+  
+  const parser = new RSSParser();
+
+  // Lista de proxies de contingência (se um falhar, o código tenta o próximo)
+  const PROXIES = [
+    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    url => `https://thingproxy.freeboard.io/fetch/${url}`
+  ];
+
+  async function buscarFeedComContingencia(targetUrl) {
+    for (let i = 0; i < PROXIES.length; i++) {
+      try {
+        const proxyUrl = PROXIES[i](targetUrl);
+        const feed = await parser.parseURL(proxyUrl);
+        if (feed && feed.items && feed.items.length > 0) {
+          return feed;
+        }
+      } catch (err) {
+        console.warn(`Proxy ${i + 1} falhou, tentando o próximo…`, err);
+      }
+    }
+    throw new Error("Todos os proxies falharam ao tentar buscar o feed.");
+  }
 
   async function buscar(rssUrl) {
     statusEl.textContent = "Buscando notícias em tempo real…";
     noticiasEl.replaceChildren();
 
-    // Usa o AllOrigins seguro (HTTPS) para contornar o CORS no GitHub Pages
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`;
-
     try {
-      const resposta = await fetch(proxyUrl);
-      if (!resposta.ok) throw new Error("Falha na resposta da rede");
-      
-      const dados = await resposta.json();
-      
-      // Converte o XML recebido em elementos legíveis do DOM
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(dados.contents, "text/xml");
-      const itens = xmlDoc.querySelectorAll("item");
+      const feed = await buscarFeedComContingencia(rssUrl);
+      const itens = feed.items || [];
 
-      if (!itens || itens.length === 0) {
-        statusEl.textContent = "Nenhuma notícia encontrada para esta categoria.";
-        return;
-      }
-
-      // Exibe as primeiras 20 notícias
-      Array.from(itens).slice(0, 20).forEach(item => {
-        const titulo = item.querySelector("title")?.textContent || "Sem título";
-        const link = item.querySelector("link")?.textContent || "#";
-        const pubDate = item.querySelector("pubDate")?.textContent;
-
+      itens.slice(0, 20).forEach(item => {
         const artigo = document.createElement("article");
         const ancora = document.createElement("a");
         
-        ancora.textContent = titulo;
-        ancora.href = link;
+        ancora.textContent = item.title || "Sem título";
+        ancora.href = item.link || "#";
         ancora.target = "_blank";
         ancora.rel = "noopener noreferrer";
 
         const detalhe = document.createElement("small");
         let dataFormatada = "";
         
-        if (pubDate) {
+        if (item.pubDate) {
           try {
-            dataFormatada = new Date(pubDate).toLocaleString("pt-BR", {
+            dataFormatada = new Date(item.pubDate).toLocaleString("pt-BR", {
               dateStyle: "short",
               timeStyle: "short"
             });
@@ -147,7 +153,7 @@
       statusEl.textContent = "Notícias atualizadas com sucesso.";
     } catch (erro) {
       console.error(erro);
-      statusEl.textContent = "Erro ao carregar as notícias. Tente novamente em alguns instantes.";
+      statusEl.textContent = "Erro ao carregar as notícias no momento. Tente trocar de categoria.";
     }
   }
 
