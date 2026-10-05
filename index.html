@@ -72,49 +72,68 @@
   <p id="status">Carregando notícias…</p>
   
   <nav class="categorias">
-    <button class="btn-categoria ativo" data-category="general">Principais</button>
-    <button class="btn-categoria" data-category="regional" data-country="BR">Brasil</button>
-    <button class="btn-categoria" data-category="world">Mundo</button>
-    <button class="btn-categoria" data-category="business">Economia</button>
-    <button class="btn-categoria" data-category="technology">Tecnologia</button>
-    <button class="btn-categoria" data-keywords="vaticano OR igreja">Igreja & Vaticano</button>
+    <button class="btn-categoria ativo" data-keywords="brasil OR governo OR politica OR economia OR mundo">Principais</button>
+    <button class="btn-categoria" data-keywords="brasil OR stf OR congresso OR governo OR sp OR rio">Brasil</button>
+    <button class="btn-categoria" data-keywords="internacional OR mundo OR eua OR europa OR china">Mundo</button>
+    <button class="btn-categoria" data-keywords="economia OR mercado OR inflacao OR ibovespa OR dolar OR selic">Economia</button>
+    <button class="btn-categoria" data-keywords="tecnologia OR inteligencia artificial OR celulare OR ciencia OR google OR apple">Tecnologia</button>
+    <button class="btn-categoria" data-keywords="vaticano OR papa OR igreja catolica">Igreja & Vaticano</button>
   </nav>
 
   <main id="noticias"></main>
 
 <script>
-  // Chave da Currents API inserida
   const API_KEY = "fbqnFFZW7IBBxV-Ir-PLY_a-Y_xw6c7HTBLJj1h4kSEUPkaG"; 
 
   const statusEl = document.querySelector("#status");
   const noticiasEl = document.querySelector("#noticias");
   const botoesCategoria = document.querySelectorAll(".btn-categoria");
 
-  async function carregarNoticias(params) {
-    statusEl.textContent = "Buscando notícias em tempo real…";
+  // Lista de filtros para ignorar conteúdos irrelevantes / spam / publicidade
+  const termosIgnorados = ["promoção", "cupom", "desconto", "horóscopo", "sorteio", "oferta", "apostas", "cassino"];
+
+  async function carregarNoticias(keywords) {
+    statusEl.textContent = "Filtrando matérias mais relevantes…";
     noticiasEl.replaceChildren();
 
+    // Chamada usando parâmetros de busca refinados na Currents API
     const url = new URL("https://api.currentsapi.services/v1/search");
     url.searchParams.append("apiKey", API_KEY);
     url.searchParams.append("language", "pt");
-
-    Object.keys(params).forEach(key => {
-      if (params[key]) url.searchParams.append(key, params[key]);
-    });
+    url.searchParams.append("keywords", keywords);
 
     try {
       const resposta = await fetch(url);
       if (!resposta.ok) throw new Error("Erro na comunicação com a API");
 
       const dados = await resposta.json();
-      const artigos = dados.news || [];
+      let artigos = dados.news || [];
+
+      // Filtro de Qualidade: 
+      // 1. Remove matérias com termos irrelevantes no título
+      // 2. Descarta títulos muito curtos (menos de 20 caracteres)
+      // 3. Remove duplicados
+      const titulosVistos = new Set();
+      artigos = artigos.filter(item => {
+        if (!item.title || item.title.length < 20) return false;
+        
+        const tituloMin = item.title.toLowerCase();
+        const contemIgnorados = termosIgnorados.some(termo => tituloMin.includes(termo));
+        if (contemIgnorados) return false;
+
+        if (titulosVistos.has(tituloMin)) return false;
+        titulosVistos.add(tituloMin);
+
+        return true;
+      });
 
       if (!artigos.length) {
-        statusEl.textContent = "Nenhuma notícia encontrada para esta categoria.";
+        statusEl.textContent = "Nenhuma notícia relevante encontrada para esta categoria neste momento.";
         return;
       }
 
-      artigos.forEach(item => {
+      // Renderiza as notícias filtradas
+      artigos.slice(0, 20).forEach(item => {
         const artigo = document.createElement("article");
         const ancora = document.createElement("a");
         
@@ -135,17 +154,17 @@
           } catch (e) {}
         }
 
-        const fonte = item.author || "Notícias";
+        const fonte = item.author || "Veículo de Notícias";
         detalhe.textContent = fonte + (dataFormatada ? " · " + dataFormatada : "");
 
         artigo.append(ancora, detalhe);
         noticiasEl.append(artigo);
       });
 
-      statusEl.textContent = "Notícias atualizadas com sucesso.";
+      statusEl.textContent = "Notícias relevantes atualizadas com sucesso.";
     } catch (erro) {
       console.error(erro);
-      statusEl.textContent = "Não foi possível carregar as notícias. Tente novamente em alguns instantes.";
+      statusEl.textContent = "Não foi possível carregar as notícias. Tente novamente em instantes.";
     }
   }
 
@@ -154,16 +173,13 @@
       botoesCategoria.forEach(b => b.classList.remove("ativo"));
       e.target.classList.add("ativo");
       
-      const category = e.target.getAttribute("data-category");
-      const country = e.target.getAttribute("data-country");
       const keywords = e.target.getAttribute("data-keywords");
-
-      carregarNoticias({ category, country, keywords });
+      carregarNoticias(keywords);
     });
   });
 
-  // Carrega as notícias principais ao abrir
-  carregarNoticias({ category: "general" });
+  // Carregamento inicial focado nos principais assuntos do país
+  carregarNoticias("brasil OR governo OR politica OR economia OR mundo");
 </script>
 </body>
 </html>
