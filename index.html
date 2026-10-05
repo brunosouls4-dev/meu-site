@@ -69,7 +69,7 @@
 </head>
 <body>
   <h1>Principais Notícias de Hoje</h1>
-  <p id="status">Carregando notícias em tempo real…</p>
+  <p id="status">Carregando notícias…</p>
   
   <nav class="categorias">
     <button class="btn-categoria ativo" data-url="https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419">Principais</button>
@@ -87,63 +87,68 @@
   const noticiasEl = document.querySelector("#noticias");
   const botoesCategoria = document.querySelectorAll(".btn-categoria");
 
-  // Callback chamada assim que o proxy retorna o RSS convertido do Google / Vaticano
-  window.carregarFeed = function(dados) {
+  async function buscar(rssUrl) {
+    statusEl.textContent = "Buscando notícias em tempo real…";
     noticiasEl.replaceChildren();
 
-    if (!dados || !dados.items || dados.items.length === 0) {
-      statusEl.textContent = "Nenhuma notícia recente encontrada para esta categoria.";
-      return;
-    }
+    // Usa o AllOrigins seguro (HTTPS) para contornar o CORS no GitHub Pages
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`;
 
-    for (const item of dados.items.slice(0, 20)) {
-      const artigo = document.createElement("article");
-      const ancora = document.createElement("a");
+    try {
+      const resposta = await fetch(proxyUrl);
+      if (!resposta.ok) throw new Error("Falha na resposta da rede");
       
-      ancora.textContent = item.title || "Sem título";
-      ancora.href = item.url || "#";
-      ancora.target = "_blank";
-      ancora.rel = "noopener noreferrer";
+      const dados = await resposta.json();
+      
+      // Converte o XML recebido em elementos legíveis do DOM
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(dados.contents, "text/xml");
+      const itens = xmlDoc.querySelectorAll("item");
 
-      const detalhe = document.createElement("small");
-      let dataFormatada = "";
-      if (item.date_published) {
-        try {
-          dataFormatada = new Date(item.date_published).toLocaleString("pt-BR", {
-            dateStyle: "short",
-            timeStyle: "short"
-          });
-        } catch (e) {}
+      if (!itens || itens.length === 0) {
+        statusEl.textContent = "Nenhuma notícia encontrada para esta categoria.";
+        return;
       }
 
-      detalhe.textContent = dataFormatada ? "Publicado em: " + dataFormatada : "";
+      // Exibe as primeiras 20 notícias
+      Array.from(itens).slice(0, 20).forEach(item => {
+        const titulo = item.querySelector("title")?.textContent || "Sem título";
+        const link = item.querySelector("link")?.textContent || "#";
+        const pubDate = item.querySelector("pubDate")?.textContent;
 
-      artigo.append(ancora);
-      if (dataFormatada) artigo.append(detalhe);
+        const artigo = document.createElement("article");
+        const ancora = document.createElement("a");
+        
+        ancora.textContent = titulo;
+        ancora.href = link;
+        ancora.target = "_blank";
+        ancora.rel = "noopener noreferrer";
 
-      noticiasEl.append(artigo);
+        const detalhe = document.createElement("small");
+        let dataFormatada = "";
+        
+        if (pubDate) {
+          try {
+            dataFormatada = new Date(pubDate).toLocaleString("pt-BR", {
+              dateStyle: "short",
+              timeStyle: "short"
+            });
+          } catch (e) {}
+        }
+
+        detalhe.textContent = dataFormatada ? "Publicado em: " + dataFormatada : "";
+
+        artigo.append(ancora);
+        if (dataFormatada) artigo.append(detalhe);
+
+        noticiasEl.append(artigo);
+      });
+
+      statusEl.textContent = "Notícias atualizadas com sucesso.";
+    } catch (erro) {
+      console.error(erro);
+      statusEl.textContent = "Erro ao carregar as notícias. Tente novamente em alguns instantes.";
     }
-
-    statusEl.textContent = "Notícias atualizadas em tempo real.";
-  };
-
-  function buscar(rssUrl) {
-    statusEl.textContent = "Buscando notícias no Google e veículos oficiais…";
-
-    // Remove scripts de requisições anteriores
-    const scriptAntigo = document.querySelector("#script-feed");
-    if (scriptAntigo) scriptAntigo.remove();
-
-    // Injeta tag <script> com a API pública do Feed2Json usando a função callback global (JSONP)
-    const script = document.createElement("script");
-    script.id = "script-feed";
-    script.src = "https://feed2json.org/convert?url=" + encodeURIComponent(rssUrl) + "&callback=carregarFeed";
-
-    script.onerror = function() {
-      statusEl.textContent = "Erro de conexão ao carregar as notícias. Verifique sua internet.";
-    };
-
-    document.body.appendChild(script);
   }
 
   botoesCategoria.forEach(botao => {
@@ -155,7 +160,7 @@
     });
   });
 
-  // Carrega as manchetes do Google Notícias ao abrir
+  // Carrega as manchetes ao abrir
   buscar("https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419");
 </script>
 </body>
